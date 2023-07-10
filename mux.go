@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"net/url"
 
 	"github.com/tidwall/gjson"
 
@@ -52,10 +53,12 @@ func (s Server) Handler() *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.Default())
 
-	r.Any("/health", s.Healthy)  // 健康检查
-	r.GET("/status", s.Status)   // 上报当前代理状态 [异常，正常]
-	r.Any("/api/*path", s.Proxy) // 代理GPT-4对话
-	r.GET("/files", s.Files)     // gpt-4-code-interpreter
+	r.Any("/health", s.Healthy)                // 健康检查
+	r.GET("/status", s.Status)                 // 上报当前代理状态 [异常，正常]
+	r.Any("/api/*path", s.Proxy)               // 代理GPT-4对话
+	r.GET("/files", s.Files)                   // gpt-4-code-interpreter
+	r.POST("/beta", s.EnableCodeInterpreter)   // 开通指定插件
+	r.GET("/beta", s.GetEnableCodeInterpreter) // 查看开通的所有插件
 	return r
 }
 
@@ -65,6 +68,52 @@ func (s Server) Status(ctx *gin.Context) {
 
 func (s Server) Healthy(ctx *gin.Context) {
 	ctx.Writer.WriteHeader(http.StatusNoContent)
+}
+
+func (s Server) EnableCodeInterpreter(ctx *gin.Context) {
+	feature := ctx.DefaultQuery("feature", "code_interpreter")
+	value := ctx.DefaultQuery("value", "true")
+
+	params := make(url.Values)
+	params.Set("feature", feature)
+	params.Set("value", value)
+
+	req, err := http.NewRequest("POST", ChatOpenAIFeature, http.NoBody)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	req.URL.RawQuery = params.Encode()
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Authorization", Auth(ctx.Request.Header))
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
+}
+
+func (s Server) GetEnableCodeInterpreter(ctx *gin.Context) {
+	req, err := http.NewRequest("GET", ChatOpenAIFeature, http.NoBody)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Authorization", Auth(ctx.Request.Header))
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 type createFileRequest struct {
