@@ -22,15 +22,14 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"net/url"
-
-	"github.com/tidwall/gjson"
 
 	"github.com/acheong08/funcaptcha"
+	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
+
 	http "github.com/bogdanfinn/fhttp"
 	tlscc "github.com/bogdanfinn/tls-client"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	cors "github.com/rs/cors/wrapper/gin"
 )
 
@@ -53,12 +52,10 @@ func (s Server) Handler() *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.Default())
 
-	r.Any("/health", s.Healthy)                // 健康检查
-	r.GET("/status", s.Status)                 // 上报当前代理状态 [异常，正常]
-	r.Any("/api/*path", s.Proxy)               // 代理GPT-4对话
-	r.GET("/files", s.Files)                   // gpt-4-code-interpreter
-	r.POST("/beta", s.EnableCodeInterpreter)   // 开通指定插件
-	r.GET("/beta", s.GetEnableCodeInterpreter) // 查看开通的所有插件
+	r.Any("/health", s.Healthy)  // 健康检查
+	r.GET("/status", s.Status)   // 上报当前代理状态 [异常，正常]
+	r.Any("/api/*path", s.Proxy) // 代理GPT-4对话
+	r.GET("/files", s.Files)     // gpt-4-code-interpreter
 	return r
 }
 
@@ -68,52 +65,6 @@ func (s Server) Status(ctx *gin.Context) {
 
 func (s Server) Healthy(ctx *gin.Context) {
 	ctx.Writer.WriteHeader(http.StatusNoContent)
-}
-
-func (s Server) EnableCodeInterpreter(ctx *gin.Context) {
-	feature := ctx.DefaultQuery("feature", "code_interpreter")
-	value := ctx.DefaultQuery("value", "true")
-
-	params := make(url.Values)
-	params.Set("feature", feature)
-	params.Set("value", value)
-
-	req, err := http.NewRequest("POST", ChatOpenAIFeature, http.NoBody)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-		return
-	}
-
-	req.URL.RawQuery = params.Encode()
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Authorization", Auth(ctx.Request.Header))
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, resp)
-}
-
-func (s Server) GetEnableCodeInterpreter(ctx *gin.Context) {
-	req, err := http.NewRequest("GET", ChatOpenAIFeature, http.NoBody)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-		return
-	}
-
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Authorization", Auth(ctx.Request.Header))
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-		return
-	}
-	ctx.JSON(http.StatusOK, resp)
 }
 
 type createFileRequest struct {
@@ -200,82 +151,126 @@ func (s Server) Files(ctx *gin.Context) {
 func (s Server) Proxy(ctx *gin.Context) {
 	s.client.SetCookies(ctx.Request.URL, []*http.Cookie{})
 
-	var (
-		url    = URL(ctx)
-		method = ctx.Request.Method
-		body   io.Reader
-	)
+	url := URL(ctx)
 
 	if IsConversation(ctx.Param("path")) {
-		in := new(OpenAIChatRequest)
-		if err := ctx.BindJSON(in); err != nil {
-			log.Printf("JSON: bind json err: %s", err)
-			ctx.JSON(http.StatusBadRequest, New(err.Error()))
+		s.Stream(ctx, url)
+		return
+	}
+
+	s.Normal(ctx, url)
+	return
+}
+
+func (s Server) Normal(ctx *gin.Context, url string) {
+	log.Printf("INFO: URL %s", url)
+
+	req, err := http.NewRequest(ctx.Request.Method, url, ctx.Request.Body)
+	if err != nil {
+		log.Printf("ERR: http new request err: %s", err)
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	req.Header.Set("Authorization", Auth(ctx.Request.Header))
+	req.Header.Set("user-agent", UserAgent)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		log.Printf("ERR: http do request err: %s", err)
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("ERR: http status code %d err: %s", resp.StatusCode, err)
+			ctx.JSON(resp.StatusCode, New(err.Error()))
 			return
 		}
 
-		if len(in.Messages) != 0 {
-			for _, message := range in.Messages {
-				if message.ID == "" {
-					message.ID = uuid.New().String()
-				}
-				if message.Author.Role == "" {
-					message.Author.Role = "user"
-				}
-			}
-		}
-
-		log.Printf("INFO: GPTMODEL %s URL %s", in.Model, url)
-
-		if IsGPT4(in.Model) {
-			if s.arkoseURL == "" {
-				arkoseToken, err := funcaptcha.GetOpenAIToken()
-				if err != nil {
-					log.Printf("ERR: funcaptcha get arkose token err:%s", err)
-					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-					return
-				}
-				in.ArkoseToken = arkoseToken
-			} else {
-				arkreq, err := http.NewRequest("GET", s.arkoseURL, http.NoBody)
-				if err != nil {
-					log.Printf("ERR: %s get arkose token err:%s", s.arkoseURL, err)
-					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-					return
-				}
-
-				resp, err := s.client.Do(arkreq)
-				if err != nil {
-					log.Printf("ERR: %s do arkose token err:%s", s.arkoseURL, err)
-					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-					return
-				}
-				defer resp.Body.Close()
-
-				jsonBuf, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Printf("ERR: %s do arkose token err:%s", s.arkoseURL, err)
-					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-					return
-				}
-
-				arkoseToken := gjson.Get(string(jsonBuf), "token").String()
-				if arkoseToken == "" {
-					ctx.JSON(http.StatusInternalServerError, New("arkose token is empty"))
-					return
-				}
-
-				in.ArkoseToken = arkoseToken
-			}
-		}
-		jsonBytes, _ := json.Marshal(in)
-		body = bytes.NewBuffer(jsonBytes)
-
-	} else {
-		body = ctx.Request.Body
+		log.Printf("ERR: http status code %d body resp: %s", resp.StatusCode, string(errBody))
+		ctx.JSON(resp.StatusCode, New(string(errBody)))
+		return
 	}
 
-	req, err := http.NewRequest(method, url, body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Err: io read all err: %s", err)
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, body)
+}
+
+func (s Server) Stream(ctx *gin.Context, url string) {
+	in := new(OpenAIChatRequest)
+	if err := ctx.BindJSON(in); err != nil {
+		log.Printf("JSON: bind json err: %s", err)
+		ctx.JSON(http.StatusBadRequest, New(err.Error()))
+		return
+	}
+
+	if len(in.Messages) != 0 {
+		for _, message := range in.Messages {
+			if message.ID == "" {
+				message.ID = uuid.New().String()
+			}
+			if message.Author.Role == "" {
+				message.Author.Role = "user"
+			}
+		}
+	}
+
+	if IsGPT4(in.Model) {
+		if s.arkoseURL == "" {
+			arkoseToken, err := funcaptcha.GetOpenAIToken()
+			if err != nil {
+				log.Printf("ERR: funcaptcha get arkose token err:%s", err)
+				ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+				return
+			}
+			in.ArkoseToken = arkoseToken
+		} else {
+			arkreq, err := http.NewRequest("GET", s.arkoseURL, http.NoBody)
+			if err != nil {
+				log.Printf("ERR: %s get arkose token err:%s", s.arkoseURL, err)
+				ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+				return
+			}
+
+			resp, err := s.client.Do(arkreq)
+			if err != nil {
+				log.Printf("ERR: %s do arkose token err:%s", s.arkoseURL, err)
+				ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+				return
+			}
+			defer resp.Body.Close()
+
+			jsonBuf, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Printf("ERR: %s do arkose token err:%s", s.arkoseURL, err)
+				ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+				return
+			}
+
+			arkoseToken := gjson.Get(string(jsonBuf), "token").String()
+			if arkoseToken == "" {
+				ctx.JSON(http.StatusInternalServerError, New("arkose token is empty"))
+				return
+			}
+
+			in.ArkoseToken = arkoseToken
+		}
+	}
+
+	jsonBytes, _ := json.Marshal(in)
+	body := bytes.NewBuffer(jsonBytes)
+
+	req, err := http.NewRequest(ctx.Request.Method, url, body)
 	if err != nil {
 		log.Printf("ERR: http new request err: %s", err)
 		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
