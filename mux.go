@@ -66,8 +66,84 @@ func (s Server) Healthy(ctx *gin.Context) {
 	ctx.Writer.WriteHeader(http.StatusNoContent)
 }
 
-func (s Server) Files(ctx *gin.Context) {
+type createFileRequest struct {
+	FileName string `json:"file_name"`
+	FileSize int    `json:"file_size"`
+	UseCase  string `json:"use_case"`
+}
 
+func (r *createFileRequest) Validate() error {
+	if r.FileName == "" {
+		return New("file name is empty")
+	}
+
+	if r.FileSize <= 0 {
+		return New("file size is <=0")
+	}
+
+	if r.UseCase == "" {
+		return New("file use case is empty")
+	}
+}
+
+func (s Server) Files(ctx *gin.Context) {
+	in := new(createFileRequest)
+	if err := ctx.BindJSON(in); err != nil {
+		ctx.JSON(http.StatusBadRequest, New(err.Error()))
+		return
+	}
+
+	if err := in.Validate(); err != nil {
+		ctx.JSON(http.StatusBadRequest, err)
+		return
+	}
+
+	payload, _ := json.Marshal(in)
+	body := bytes.NewReader(payload)
+
+	url := ChatOpenAI + "/backend-api/files"
+
+	req, err := http.NewRequest(http.MethodPost, url, body)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Authorization", Auth(ctx.Request.Header))
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			ctx.JSON(resp.StatusCode, New(err.Error()))
+			return
+		}
+
+		ctx.JSON(resp.StatusCode, New(string(errBody)))
+		return
+	}
+
+	fbody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	var fileResp CreateFilesResponse
+	if err := json.Unmarshal(fbody, &fileResp); err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, fileResp)
 }
 
 func (s Server) Proxy(ctx *gin.Context) {

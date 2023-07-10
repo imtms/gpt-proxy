@@ -22,6 +22,12 @@ import (
 	"strings"
 )
 
+type CreateFilesResponse struct {
+	Status    string `json:"status"`
+	UploadUrl string `json:"upload_url"`
+	FileId    string `json:"file_id"`
+}
+
 func Auth(header kithttp.Header) string {
 	xAuth := header.Get("X-Authorization")
 	if xAuth == "" {
