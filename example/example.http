@@ -1,0 +1,15 @@
+### gpt-4-code-interpreter 调用
+POST http://127.0.0.1:8090/
+Content-Type: application/json
+Authorization: Basic cXdlcnR5OlRtZTBoTjd0dzdrcWsx
+
+{
+  "action": "next",
+  "messages": [
+    {
+      "role": "user",
+      "content": "请帮我画一下张好看的gif图片，关于旋转的立方体。"
+    }
+  ],
+  "stream": true
+}

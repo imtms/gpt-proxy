@@ -19,8 +19,8 @@ package gpt_proxy
 import (
 	"io"
 	"log"
-	kithttp "net/http"
-	"strings"
+
+	"github.com/tidwall/gjson"
 
 	"github.com/acheong08/funcaptcha"
 	http "github.com/bogdanfinn/fhttp"
@@ -63,53 +63,83 @@ func (s Server) Healthy(ctx *gin.Context) {
 	ctx.Writer.WriteHeader(http.StatusNoContent)
 }
 
+func (s Server) File(ctx *gin.Context) {
+
+}
+
 func (s Server) Proxy(ctx *gin.Context) {
 	s.client.SetCookies(ctx.Request.URL, []*http.Cookie{})
 
-	method := ctx.Request.Method
-	url := ChatOpenAI + ""
+	var (
+		url    = URL(ctx)
+		method = ctx.Request.Method
+		body   io.Reader
+	)
 
-	in := new(OpenAIChatRequest)
-	if err := ctx.BindJSON(in); err != nil {
-		log.Printf("JSON: bind json err: %s", err)
-		ctx.JSON(http.StatusBadRequest, New(err.Error()))
-		return
-	}
+	if IsConversation(ctx.Param("path")) {
+		in := new(OpenAIChatRequest)
+		if err := ctx.BindJSON(in); err != nil {
+			log.Printf("JSON: bind json err: %s", err)
+			ctx.JSON(http.StatusBadRequest, New(err.Error()))
+			return
+		}
 
-	if len(in.Messages) != 0 {
-		for _, message := range in.Messages {
-			if message.ID == "" {
-				message.ID = uuid.New().String()
-			}
-			if message.Author.Role == "" {
-				message.Author.Role = "user"
+		if len(in.Messages) != 0 {
+			for _, message := range in.Messages {
+				if message.ID == "" {
+					message.ID = uuid.New().String()
+				}
+				if message.Author.Role == "" {
+					message.Author.Role = "user"
+				}
 			}
 		}
-	}
 
-	if IsGPT4(in.Model) {
-		if s.arkoseURL == "" {
-			arkoseToken, err := funcaptcha.GetOpenAIToken()
-			if err != nil {
-				log.Printf("ERR: funcaptcha get arkose token err:%s", err)
-				ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-				return
-			}
-			in.ArkoseToken = arkoseToken
-		} else {
-			arkreq, err := http.NewRequest("GET", s.arkoseURL, http.NoBody)
-			if err != nil {
-				log.Printf("ERR: %s get arkose token err:%s", s.arkoseURL, err)
-				ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-				return
-			}
+		if IsGPT4(in.Model) {
+			if s.arkoseURL == "" {
+				arkoseToken, err := funcaptcha.GetOpenAIToken()
+				if err != nil {
+					log.Printf("ERR: funcaptcha get arkose token err:%s", err)
+					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+					return
+				}
+				in.ArkoseToken = arkoseToken
+			} else {
+				arkreq, err := http.NewRequest("GET", s.arkoseURL, http.NoBody)
+				if err != nil {
+					log.Printf("ERR: %s get arkose token err:%s", s.arkoseURL, err)
+					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+					return
+				}
 
+				resp, err := s.client.Do(arkreq)
+				if err != nil {
+					log.Printf("ERR: %s do arkose token err:%s", s.arkoseURL, err)
+					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+					return
+				}
+				defer resp.Body.Close()
+
+				jsonBuf, err := io.ReadAll(resp.Body)
+				if err != nil {
+					log.Printf("ERR: %s do arkose token err:%s", s.arkoseURL, err)
+					ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+					return
+				}
+
+				arkoseToken := gjson.Get(string(jsonBuf), "token").String()
+				if arkoseToken == "" {
+					ctx.JSON(http.StatusInternalServerError, New("arkose token is empty"))
+					return
+				}
+				in.ArkoseToken = arkoseToken
+			}
 		}
+	} else {
+		body = ctx.Request.Body
 	}
 
-	var body io.Reader
-
-	req, err := http.NewRequest("", "", body)
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		log.Printf("ERR: http new request err: %s", err)
 		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
@@ -142,21 +172,4 @@ func (s Server) Proxy(ctx *gin.Context) {
 
 	ctx.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 
-}
-
-func Auth(header kithttp.Header) string {
-	xAuth := header.Get("X-Authorization")
-	if xAuth == "" {
-		return header.Get("Authorization")
-	}
-	return xAuth
-}
-
-func IsGPT4(s string) bool {
-	// gpt-4
-	// gpt-4-code-interpreter
-	if strings.Contains(s, "gpt-4") {
-		return true
-	}
-	return false
 }
