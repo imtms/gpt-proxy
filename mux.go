@@ -84,6 +84,7 @@ func (r *createFileRequest) Validate() error {
 	if r.UseCase == "" {
 		return New("file use case is empty")
 	}
+	return nil
 }
 
 func (s Server) Files(ctx *gin.Context) {
