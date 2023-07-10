@@ -37,14 +37,7 @@ func Auth(header kithttp.Header) string {
 }
 
 func IsGPT4(s string) bool {
-	if s == "gpt-4" {
-		return true
-	}
-	return false
-}
-
-func IsGPT4Code(s string) bool {
-	if s == "gpt-4-code-interpreter" {
+	if strings.Contains(s, "gpt-4") {
 		return true
 	}
 	return false
