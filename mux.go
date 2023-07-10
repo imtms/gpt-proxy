@@ -163,8 +163,6 @@ func (s Server) Proxy(ctx *gin.Context) {
 }
 
 func (s Server) Normal(ctx *gin.Context, url string) {
-	log.Printf("INFO: URL %s", url)
-
 	req, err := http.NewRequest(ctx.Request.Method, url, ctx.Request.Body)
 	if err != nil {
 		log.Printf("ERR: http new request err: %s", err)
@@ -203,7 +201,14 @@ func (s Server) Normal(ctx *gin.Context, url string) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, body)
+	var respData any
+	if err := json.Unmarshal(body, &respData); err != nil {
+		log.Printf("Err: json unmarshal err: %s", err)
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, respData)
 }
 
 func (s Server) Stream(ctx *gin.Context, url string) {
