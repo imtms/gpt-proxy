@@ -56,7 +56,7 @@ func main() {
 		log.Println("set proxy success: ", config.HttpProxy)
 	}
 
-	mux := gpt_proxy.New(cc, config.ArkoseURL, config.ReportURL)
+	mux := gpt_proxy.NewServer(cc, config.ArkoseURL, config.ReportURL)
 	if err := mux.Handler().Run(); err != nil {
 		log.Panic(fmt.Sprintf("http server run err:%s", err))
 	}
