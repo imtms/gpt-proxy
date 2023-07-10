@@ -17,6 +17,7 @@ limitations under the License.
 package gpt_proxy
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -254,9 +255,35 @@ func (s Server) Proxy(ctx *gin.Context) {
 
 	ctx.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 
-	_, err = io.Copy(ctx.Writer, resp.Body)
-	if err != nil {
+	if err := streamFlush(ctx, resp.Body); err != nil {
+		log.Printf("ERR: while copying lines: %v", err)
 		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
 		return
 	}
+}
+
+func streamFlush(ctx *gin.Context, r io.Reader) error {
+	scanner := bufio.NewScanner(r)
+	writer := bufio.NewWriter(ctx.Writer)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Request.Context().Done():
+			if err := writer.Flush(); err != nil {
+				return err
+			}
+			return ctx.Request.Context().Err()
+		default:
+			line := scanner.Text()
+			if _, err := writer.WriteString(line + "\n\n"); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	return scanner.Err()
 }
