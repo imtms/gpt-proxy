@@ -17,6 +17,8 @@ limitations under the License.
 package gpt_proxy
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"log"
 
@@ -135,6 +137,8 @@ func (s Server) Proxy(ctx *gin.Context) {
 				in.ArkoseToken = arkoseToken
 			}
 		}
+		jsonBytes, _ := json.Marshal(in)
+		body = bytes.NewBuffer(jsonBytes)
 	} else {
 		body = ctx.Request.Body
 	}
