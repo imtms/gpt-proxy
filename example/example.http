@@ -1,13 +1,19 @@
 ### gpt-4-code-interpreter 调用
-POST http://127.0.0.1:8080/api/conversion
+POST http://127.0.0.1:8080/api/conversation
 Content-Type: application/json
+Authorization: Bearer
 
 {
   "action": "next",
   "messages": [
     {
       "role": "user",
-      "content": "请帮我画一下张好看的gif图片，关于旋转的立方体。"
+      "content": {
+        "content_type": "text",
+        "parts": [
+          "请帮我画一下张好看的gif图片，关于旋转的立方体。"
+        ]
+      }
     }
   ],
   "stream": false

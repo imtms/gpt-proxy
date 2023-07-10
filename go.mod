@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/rs/cors/wrapper/gin v0.0.0-20230526135330-e90f16747950
+	github.com/tidwall/gjson v1.14.4
 )
 
 replace github.com/acheong08/funcaptcha => github.com/linweiyuan/funcaptcha v0.0.0-20230629103923-00fe6789403e
@@ -35,7 +36,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/rs/cors v1.8.1 // indirect
 	github.com/tam7t/hpkp v0.0.0-20160821193359-2b70b4024ed5 // indirect
-	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect

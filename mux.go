@@ -213,6 +213,7 @@ func (s Server) Proxy(ctx *gin.Context) {
 					ctx.JSON(http.StatusInternalServerError, New("arkose token is empty"))
 					return
 				}
+
 				in.ArkoseToken = arkoseToken
 			}
 		}
@@ -222,6 +223,7 @@ func (s Server) Proxy(ctx *gin.Context) {
 		body = ctx.Request.Body
 	}
 
+	log.Printf("INFO: GPTMODEL %s URL %s")
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		log.Printf("ERR: http new request err: %s", err)
