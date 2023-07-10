@@ -23,14 +23,13 @@ import (
 	"io"
 	"log"
 
-	"github.com/tidwall/gjson"
-
 	"github.com/acheong08/funcaptcha"
 	http "github.com/bogdanfinn/fhttp"
 	tlscc "github.com/bogdanfinn/tls-client"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	cors "github.com/rs/cors/wrapper/gin"
+	"github.com/tidwall/gjson"
 )
 
 type Server struct {
@@ -52,10 +51,11 @@ func (s Server) Handler() *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.Default())
 
-	r.Any("/health", s.Healthy)  // 健康检查
-	r.GET("/status", s.Status)   // 上报当前代理状态 [异常，正常]
-	r.Any("/api/*path", s.Proxy) // 代理GPT-4对话
-	r.GET("/files", s.Files)     // gpt-4-code-interpreter
+	r.Any("/health", s.Healthy)                // 健康检查
+	r.GET("/status", s.Status)                 // 上报当前代理状态 [异常，正常]
+	r.Any("/api/*path", s.Proxy)               // 代理GPT-4对话
+	r.POST("/files", s.Files)                  // gpt-4-code-interpreter
+	r.POST("/process_upload", s.ProcessUpload) // gpt-4-code-interpreter
 	return r
 }
 
@@ -67,25 +67,19 @@ func (s Server) Healthy(ctx *gin.Context) {
 	ctx.Writer.WriteHeader(http.StatusNoContent)
 }
 
-type createFileRequest struct {
-	FileName string `json:"file_name"`
-	FileSize int    `json:"file_size"`
-	UseCase  string `json:"use_case"`
-}
+func (s Server) sendRequest(ctx *gin.Context, url string, payload []byte) (*http.Response, error) {
+	body := bytes.NewReader(payload)
 
-func (r *createFileRequest) Validate() error {
-	if r.FileName == "" {
-		return New("file name is empty")
+	req, err := http.NewRequest(http.MethodPost, url, body)
+	if err != nil {
+		return nil, err
 	}
 
-	if r.FileSize <= 0 {
-		return New("file size is <=0")
-	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Authorization", Auth(ctx.Request.Header))
+	req.Header.Set("Accept", "application/json")
 
-	if r.UseCase == "" {
-		return New("file use case is empty")
-	}
-	return nil
+	return s.client.Do(req)
 }
 
 func (s Server) Files(ctx *gin.Context) {
@@ -101,21 +95,11 @@ func (s Server) Files(ctx *gin.Context) {
 	}
 
 	payload, _ := json.Marshal(in)
-	body := bytes.NewReader(payload)
 
 	url := ChatOpenAI + "/backend-api/files"
 
-	req, err := http.NewRequest(http.MethodPost, url, body)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
-		return
-	}
+	resp, err := s.sendRequest(ctx, url, payload)
 
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Authorization", Auth(ctx.Request.Header))
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.client.Do(req)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
 		return
@@ -140,6 +124,55 @@ func (s Server) Files(ctx *gin.Context) {
 	}
 
 	var fileResp CreateFilesResponse
+	if err := json.Unmarshal(fbody, &fileResp); err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, fileResp)
+}
+
+func (s Server) ProcessUpload(ctx *gin.Context) {
+	in := new(processUploadRequest)
+	if err := ctx.BindJSON(in); err != nil {
+		ctx.JSON(http.StatusBadRequest, New(err.Error()))
+		return
+	}
+
+	if err := in.Validate(); err != nil {
+		ctx.JSON(http.StatusBadRequest, err)
+		return
+	}
+
+	payload, _ := json.Marshal(in)
+
+	url := ChatOpenAI + "/backend-api/conversation/interpreter/process_upload"
+
+	resp, err := s.sendRequest(ctx, url, payload)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			ctx.JSON(resp.StatusCode, New(err.Error()))
+			return
+		}
+
+		ctx.JSON(resp.StatusCode, New(string(errBody)))
+		return
+	}
+
+	fbody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
+
+	var fileResp processUploadResponse
 	if err := json.Unmarshal(fbody, &fileResp); err != nil {
 		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
 		return

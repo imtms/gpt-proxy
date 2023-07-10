@@ -22,10 +22,54 @@ import (
 	"strings"
 )
 
+type createFileRequest struct {
+	FileName string `json:"file_name"`
+	FileSize int    `json:"file_size"`
+	UseCase  string `json:"use_case"`
+}
+
+type processUploadRequest struct {
+	ConversationId string `json:"conversation_id"`
+	FileId         string `json:"file_id"`
+	FileName       string `json:"file_name"`
+}
+
 type CreateFilesResponse struct {
 	Status    string `json:"status"`
 	UploadUrl string `json:"upload_url"`
 	FileId    string `json:"file_id"`
+}
+
+type processUploadResponse struct {
+	Status      string `json:"status"`
+	DownloadUrl string `json:"download_url"`
+}
+
+func (r *createFileRequest) Validate() error {
+	if r.FileName == "" {
+		return New("file name is empty")
+	}
+
+	if r.FileSize <= 0 {
+		return New("file size is <=0")
+	}
+
+	if r.UseCase == "" {
+		return New("file use case is empty")
+	}
+	return nil
+}
+
+func (r *processUploadRequest) Validate() error {
+	if r.FileId == "" {
+		return New("file id is empty")
+	}
+
+	if r.FileName == "" {
+		return New("file name is empty")
+	}
+
+	return nil
 }
 
 func Auth(header kithttp.Header) string {

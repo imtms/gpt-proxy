@@ -88,7 +88,7 @@ type Metadata struct {
 	Attachments Attachments `json:"attachments"`
 }
 
-type Attachments Attachment
+type Attachments []Attachment
 
 type Attachment struct {
 	Name string `json:"name"` // 'main.dart.js',
