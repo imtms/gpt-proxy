@@ -60,7 +60,7 @@ func (s Server) Handler() *gin.Engine {
 }
 
 func (s Server) Status(ctx *gin.Context) {
-	ctx.Writer.WriteHeader(http.StatusNoContent)
+	ctx.JSON(http.StatusOK, "OK")
 }
 
 func (s Server) Healthy(ctx *gin.Context) {
