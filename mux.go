@@ -176,6 +176,8 @@ func (s Server) Proxy(ctx *gin.Context) {
 			}
 		}
 
+		log.Printf("INFO: GPTMODEL %s URL %s", in.Model, url)
+
 		if IsGPT4(in.Model) {
 			if s.arkoseURL == "" {
 				arkoseToken, err := funcaptcha.GetOpenAIToken()
@@ -219,11 +221,11 @@ func (s Server) Proxy(ctx *gin.Context) {
 		}
 		jsonBytes, _ := json.Marshal(in)
 		body = bytes.NewBuffer(jsonBytes)
+
 	} else {
 		body = ctx.Request.Body
 	}
 
-	log.Printf("INFO: GPTMODEL %s URL %s")
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		log.Printf("ERR: http new request err: %s", err)
@@ -245,7 +247,7 @@ func (s Server) Proxy(ctx *gin.Context) {
 	if resp.StatusCode != http.StatusOK {
 		errBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("ERR: http status code %s err: %s", resp.StatusCode, err)
+			log.Printf("ERR: http status code %d err: %s", resp.StatusCode, err)
 			ctx.JSON(resp.StatusCode, New(err.Error()))
 			return
 		}
