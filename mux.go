@@ -24,6 +24,7 @@ import (
 type Server struct {
 	httpProxy string
 	arkoseURL string
+	reportURL string
 }
 
 func (s Server) Handler() *gin.Engine {
@@ -31,8 +32,13 @@ func (s Server) Handler() *gin.Engine {
 	r := gin.Default()
 
 	r.Any("/health", s.Healthy)
+	r.GET("/status", s.Status)
 	r.Any("/api/*path", s.Proxy)
 	return r
+}
+
+func (s Server) Status(ctx *gin.Context) {
+
 }
 
 func (s Server) Healthy(ctx *gin.Context) {
