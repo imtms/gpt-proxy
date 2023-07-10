@@ -51,9 +51,10 @@ func (s Server) Handler() *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.Default())
 
-	r.Any("/health", s.Healthy)
-	r.GET("/status", s.Status)
-	r.Any("/api/*path", s.Proxy)
+	r.Any("/health", s.Healthy)  // 健康检查
+	r.GET("/status", s.Status)   // 上报当前代理状态 [异常，正常]
+	r.Any("/api/*path", s.Proxy) // 代理GPT-4对话
+	r.GET("/files", s.Files)     // gpt-4-code-interpreter
 	return r
 }
 
@@ -65,7 +66,7 @@ func (s Server) Healthy(ctx *gin.Context) {
 	ctx.Writer.WriteHeader(http.StatusNoContent)
 }
 
-func (s Server) File(ctx *gin.Context) {
+func (s Server) Files(ctx *gin.Context) {
 
 }
 
