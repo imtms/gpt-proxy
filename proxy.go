@@ -69,10 +69,10 @@ type OpenAIChatRequest struct {
 type OpenAIMessages []OpenAIMessage
 
 type OpenAIMessage struct {
-	ID       string      `json:"id"`
-	Author   Author      `json:"author"`
-	Content  Content     `json:"content"`
-	Metadata interface{} `json:"metadata"`
+	ID       string   `json:"id"`
+	Author   Author   `json:"author"`
+	Content  Content  `json:"content"`
+	Metadata Metadata `json:"metadata,omitempty"` // Metadata gpt-4-code-interpreter
 }
 
 type Author struct {
@@ -82,4 +82,15 @@ type Author struct {
 type Content struct {
 	ContentType string   `json:"content_type"`
 	Parts       []string `json:"parts"`
+}
+
+type Metadata struct {
+	Attachments Attachments `json:"attachments"`
+}
+
+type Attachments Attachment
+
+type Attachment struct {
+	Name string `json:"name"` // 'main.dart.js',
+	Url  string `json:"url"`  // 'url': 'https://fileserviceuploadsperm.blob.core.windows.net/files/f4887960-c49a-421f-8342-48d8fc562fee?se=2023-07-09T09%3A15%3A13Z&sp=c&sv=2021-08-06&sr=b&sig=K4ZhZojkmoDgsmxRRbFp06z48ZOm9oQ%2BHVEW0E1jP6w%3D',
 }
