@@ -19,8 +19,9 @@ package gpt_proxy
 import "github.com/kelseyhightower/envconfig"
 
 const (
-	UserAgent  = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-	ChatOpenAI = "https://chat.openai.com"
+	UserAgent         = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+	ChatOpenAI        = "https://chat.openai.com"
+	ChatOpenAIFeature = ChatOpenAI + "/backend-api/settings/beta_features"
 )
 
 type Config struct {
