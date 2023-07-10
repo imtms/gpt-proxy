@@ -165,11 +165,16 @@ func (s Server) Proxy(ctx *gin.Context) {
 			return
 		}
 
-		log.Printf("ERR: http status code %s body resp: %s", resp.StatusCode, string(errBody))
+		log.Printf("ERR: http status code %d body resp: %s", resp.StatusCode, string(errBody))
 		ctx.JSON(resp.StatusCode, New(string(errBody)))
 		return
 	}
 
 	ctx.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 
+	_, err = io.Copy(ctx.Writer, resp.Body)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, New(err.Error()))
+		return
+	}
 }

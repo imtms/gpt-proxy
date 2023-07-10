@@ -24,9 +24,9 @@ const (
 )
 
 type Config struct {
-	HttpProxy string `envconfig:"HTTP_PROXY"`
+	HttpProxy string `envconfig:"HTTP_PROXY" default:"http://hahaha:xixixi@202.182.71.232:17575"`
+	ArkoseURL string `envconfig:"ARKOSE_URL" default:"https://chatarkose.xyhelper.cn/token"`
 	ReportURL string `envconfig:"REPORT_URL"`
-	ArkoseURL string `envconfig:"ARKOSE_URL"`
 }
 
 // Environ returns the settings from the environment.
