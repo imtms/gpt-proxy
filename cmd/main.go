@@ -17,10 +17,47 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
+	"log"
 	"math/rand"
 	"time"
+
+	tlsclient "github.com/bogdanfinn/tls-client"
+	gpt_proxy "yho.io/gptproxy"
 )
 
 func main() {
 	rand.Seed(time.Now().Unix())
+
+	config, err := gpt_proxy.Environ()
+	if err != nil {
+		log.Panic(fmt.Sprintf("load env config err:%s", err))
+	}
+
+	if err := config.Validate(); err != nil {
+		log.Panic(fmt.Sprintf("config validate err: %s", err))
+	}
+
+	options := []tlsclient.HttpClientOption{
+		tlsclient.WithTimeoutSeconds(360),
+		tlsclient.WithClientProfile(tlsclient.Safari_IOS_16_0),
+		tlsclient.WithNotFollowRedirects(),
+		tlsclient.WithCookieJar(tlsclient.NewCookieJar()), // create cookieJar instance and pass it as argument
+	}
+	cc, err := tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
+	if err != nil {
+		log.Panic(fmt.Sprintf("tls new client err:%s", err))
+	}
+
+	if config.HttpProxy != "" {
+		if err := cc.SetProxy(config.HttpProxy); err != nil {
+			log.Panic(fmt.Sprintf("tls set proxy err:%s", err))
+		}
+		log.Println("set proxy success: ", config.HttpProxy)
+	}
+
+	mux := gpt_proxy.New(cc, config.ArkoseURL, config.ReportURL)
+	if err := mux.Handler().Run(); err != nil {
+		log.Panic(fmt.Sprintf("http server run err:%s", err))
+	}
 }

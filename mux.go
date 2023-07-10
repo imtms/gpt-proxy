@@ -17,19 +17,30 @@ limitations under the License.
 package gpt_proxy
 
 import (
+	tlsclient "github.com/bogdanfinn/tls-client"
 	"github.com/gin-gonic/gin"
+	cors "github.com/rs/cors/wrapper/gin"
 	"net/http"
 )
 
 type Server struct {
-	httpProxy string
+	client    tlsclient.HttpClient
 	arkoseURL string
 	reportURL string
+}
+
+func New(cc tlsclient.HttpClient, arkoseURL, reportURL string) *Server {
+	return &Server{
+		client:    cc,
+		arkoseURL: arkoseURL,
+		reportURL: reportURL,
+	}
 }
 
 func (s Server) Handler() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	r.Use(cors.Default())
 
 	r.Any("/health", s.Healthy)
 	r.GET("/status", s.Status)

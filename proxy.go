@@ -15,3 +15,23 @@ limitations under the License.
 */
 
 package gpt_proxy
+
+import "github.com/kelseyhightower/envconfig"
+
+type Config struct {
+	HttpProxy string `envconfig:"HTTP_PROXY"`
+	ReportURL string `envconfig:"REPORT_URL"`
+	ArkoseURL string `envconfig:"ARKOSE_URL"`
+}
+
+// Environ returns the settings from the environment.
+func Environ() (Config, error) {
+	cfg := Config{}
+	err := envconfig.Process("", &cfg)
+	return cfg, err
+}
+
+func (c Config) Validate() error {
+
+	return nil
+}
